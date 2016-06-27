@@ -1,0 +1,16 @@
+<md-content layout="column" layout-align="center left">
+      <h2>{{getModeName()}}</h2>
+
+      <div ng-if="getModeName() === modes.gpio">
+         <gpio-mode parameters="getParameters()"></gpio-mode>
+      </div>
+      <div ng-if="getModeName() === modes.composite">
+         <composite-mode parameters="getParameters()"></composite-mode>
+      </div>
+      <div ng-if="getModeName() === modes.empty">
+         <empty-mode parameters="getParameters()"></empty-mode>
+      </div>
+      <div ng-if="isUnknown()">
+         <unknown-mode parameters="getParameters()"></unknown-mode>
+      </div>
+</md-content>
