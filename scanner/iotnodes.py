@@ -252,6 +252,7 @@ class Scanner(object):
             pass
 
     def stop_handler_thread(self):
+        print "Stopping handler thread..."
         self.running = False
 
     def start_handler_thread(self):
@@ -294,15 +295,16 @@ class Scanner(object):
         gpiomode12 = GPIOMode(2)
         gpiomode12.set_parameter(IOperatingMode.STATUS, 0, notify = False)
         compositemode12.add_mode(gpiomode12)
-        sticazzimode1 = IOperatingMode("sticazzi_mode", {'sticazziparams': 42})
+        cosemode1 = IOperatingMode("cose_mode", {'coseparams': 42})
         compositemode1.add_mode(gpiomode11)
-        compositemode1.add_mode(sticazzimode1)
+        compositemode1.add_mode(cosemode1)
         self.esplist[esp1.name] = esp1
 
     def get_node_list(self):
         tosend = []
 
         for esp in self.esplist:
+            print "ESP: %s" % esp
             node = self.esplist[esp]
             print "ESP: %s %s" % (esp, str(node))
             tosend.append({ "name": node.name, "ip": node.ip, "mode": node.mode.to_dict() })
