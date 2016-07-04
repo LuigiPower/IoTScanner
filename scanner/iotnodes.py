@@ -1,6 +1,8 @@
 import netifaces
 import httplib
 import json
+import sys
+import traceback
 #from netaddr import IPNetwork
 #from netaddr import IPAddress
 #from netaddr import iter_iprange
@@ -328,18 +330,85 @@ class Scanner(object):
 
     def mask_to_count(self, mask):
         count = 0
-        for c in mask.bits():
-            if c == '1':
-                count = count + 1
-        return count
+        bit = 1
+        split = mask.rsplit('.')
+        binarymask = []
+        numbermask = []
+
+        for number in split:
+            n = int(number)
+            numbermask.append(n)
+            while bit < 256:
+                if n & bit == 0:
+                    binarymask.append(0)
+                else:
+                    binarymask.append(1)
+                    count += 1
+                    bit *= 2
+        #for c in mask.bits():
+        #    if c == '1':
+        #        count = count + 1
+        return (count, binarymask, numbermask)
+
+    def get_network_address(self, address, numbermask):
+        split = address.rsplit('.')
+        numbernetwork = []
+        for i in range(0, len(split)):
+            n = int(split[i])
+            numbernetwork.append(n & numbermask[i])
+        return numbernetwork
 
     def run_scan(self):
         """ Runs a network scan
         may take a few minutes (does a HTTP request on each device connected to the network)
         """
+        print "Running scan..."
         iplist = self._get_local_ip_list()
         esplist = self._scan_local_ips(iplist)
         return esplist
+
+    def get_broadcast_address(self, numberaddress, numbermask):
+        broadcast = []
+
+        for i in range(0, len(numberaddress)):
+            number = (numberaddress[i] & numbermask[i]) | ~numbermask[i]
+            broadcast.append(number & 255)
+        return broadcast
+
+    def ipcmp(self, numberipa, numberipb):
+        for i in range(0, len(numberipa)):
+            if numberipa[i] != numberipb[i]:
+                return False
+        return True
+
+    def iter_iprange(self, numbernetwork, numbermask):
+        iprange = []
+        #iter_bounds = []
+        actual = []
+        last_ip = numbernetwork
+
+        broadcast = self.get_broadcast_address(numbernetwork, numbermask)
+        #for i in xrange(0, len(broadcast)):
+        #    iter_bounds[i] = (numbernetwork[i], broadcast[i])
+
+        actual = list(numbernetwork)
+        current_number = len(actual) - 1
+
+        while not self.ipcmp(actual, broadcast):
+            # 192.168.0.0
+            if actual[current_number] < broadcast[current_number]:
+                actual[current_number] += 1
+                if current_number < len(actual) - 1:
+                    current_number += 1
+            else: #actual[current_number] is 255 (or similar)
+                actual[current_number] = numbernetwork[current_number]
+                if current_number > 0:
+                    current_number -= 1
+
+            new_list = list(actual)
+            iprange.append(new_list)
+
+        return iprange
 
     def _get_local_ip_list(self):
         """ Gets list of this server's interfaces
@@ -350,12 +419,10 @@ class Scanner(object):
 
         print "Addresses %s" % str(local_ip_addresses)
         for address in local_ip_addresses:
-            count = self.mask_to_count(IPAddress(address['netmask']))
-            network = IPNetwork("%s/%d" % (address['addr'], count))
-            start = network.network
-            end = network.broadcast
+            (count, binarymask, numbermask) = self.mask_to_count(address['netmask'])
+            numbernetwork = self.get_network_address(address['addr'], numbermask)
 
-            iterator = iter_iprange(start, end)
+            iterator = self.iter_iprange(numbernetwork, numbermask)
             for ip in iterator:
                 iplist.append(ip)
 
@@ -370,12 +437,12 @@ class Scanner(object):
 
         number = 0
         for ip in iplist:
-            if str(ip) != "10.40.0.32":
-                continue
-            print ip
-            print "doing stuff"
             try:
-                conn = httplib.HTTPConnection(str(ip), IoTNode.PORT_NUMBER)
+                strip = "%d.%d.%d.%d:%d" % (ip[0], ip[1], ip[2], ip[3], IoTNode.PORT_NUMBER)
+                if strip != "10.40.0.88":
+                    continue
+                print "Doing HTTPConnection to %s" % strip
+                conn = httplib.HTTPConnection(strip)
                 conn.request("GET", "/scanning/beacon")
                 #TODO fare un POST invece di GET, inviando l'ip del server
                 #TODO l'ip del server dovrebbe corrispondere all'interfaccia corretta... (basta passarlo insieme alla lista (quindi non passare una lista ma un dizionario in cui a ogni interfaccia corrisponde la sua lista di ip))
@@ -396,7 +463,8 @@ class Scanner(object):
                 print self.esplist
                 number += 1
             except :
-                pass
+                print "Unexpected error", sys.exc_info()[0]
+                print traceback.format_exc()
 
         print self.esplist
 

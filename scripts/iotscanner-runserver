@@ -5,7 +5,7 @@ import sys
 print "testing"
 
 def start_flask():
-    app.debug = True
+    #app.debug = True
     app.run(host='0.0.0.0')
 
 start_flask()
