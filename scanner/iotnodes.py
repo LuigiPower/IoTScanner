@@ -9,7 +9,9 @@ import traceback
 from threading import Thread
 from iotgcm import Notifier
 from iotgcm import Event
-from time import sleep
+import time
+
+current_milli_time = lambda: int(round(time.time() * 1000))
 
 ################################################################################
 # NODE INITIALIZATION
@@ -41,17 +43,20 @@ class IOperatingMode(object):
         """ Set specified parameter to value
         Also notifies any observers
         """
-        #TODO notify iotnode so that I can do stuff about it (GCM message, IFTTT....)
         oldvalue = self.parameters[key]
         self.parameters[key] = value
 
         if notify:
+            print "Notifying"
             event = Event(self.noderef, self, Event.VALUE_CHANGED, [key], [oldvalue], [value])
             Scanner.notifier.add_event(event)
 
     def get_parameter(self, parameter):
         """ Get specified parameter """
         return self.parameters[parameter]
+
+    def do_test_command(self, command):
+        return False
 
     def to_dict(self):
         """ Gets this mode as a dictionary """
@@ -83,6 +88,8 @@ class BasicMode(IOperatingMode):
             #TODO notify DISCONNECTED
             pass
 
+    def do_test_command(self, command):
+        return False
 
 class EmptyMode(IOperatingMode):
     """ Empty Mode
@@ -95,23 +102,48 @@ class EmptyMode(IOperatingMode):
     def update_data(self):
         super(EmptyMode, self).update_data()
 
+    def do_test_command(self, command):
+        return False
 
-class GPIOMode(IOperatingMode):
-    """ GPIO Mode
+class SensorMode(IOperatingMode):
+    """ GPIO Read Mode
     Allows
-        /gpio<pin>/<value>
+        /sensor<id>/value
     """
-    GPIO = 'gpio'
+    ID = 'id'
+    CURRENT_VALUE = 'current_value'
+    TIME_MILLIS = 'time_millis'
 
-    def __init__(self, pin):
-        super(GPIOMode, self).__init__(name = "gpio_mode", parameters = {
-                GPIOMode.GPIO: pin,
-                IOperatingMode.STATUS: 0
+    def __init__(self, sensorid, name = "sensor_mode"):
+        super(SensorMode, self).__init__(name, parameters = {
+                SensorMode.ID: sensorid,
+                SensorMode.CURRENT_VALUE: 0,
+                SensorMode.TIME_MILLIS: 0
             })
 
-    def update_data(self):
-        super(GPIOMode, self).update_data()
+    def do_test_command(self, action):
+        print "SensorMode do_test_command action %s" % action
+        if action == "sensor%s/value" % self.get_parameter(SensorMode.ID):
+            print "SensorMode action successful!"
+            return {
+                    SensorMode.CURRENT_VALUE: self.get_parameter(SensorMode.CURRENT_VALUE),
+                    SensorMode.TIME_MILLIS: current_milli_time(),
+                    SensorMode.ID: self.get_parameter(SensorMode.ID)
+                }
+        else:
+            return False
 
+    def update_data(self):
+        super(SensorMode, self).update_data()
+        result = self.noderef.send_command("/sensor%d/value" % self.get_parameter(SensorMode.ID))
+
+        json.loads(result) #TODO check this
+        oldval = self.get_parameter(SensorMode.CURRENT_VALUE)
+        val = result[SensorMode.CURRENT_VALUE]
+
+        if  val != oldval:
+            set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
+            set_parameter(SensorMode.CURRENT_VALUE, val)
 
 class GPIOReadMode(IOperatingMode):
     """ GPIO Read Mode
@@ -120,8 +152,8 @@ class GPIOReadMode(IOperatingMode):
     """
     GPIO = 'gpio'
 
-    def __init__(self, pin):
-        super(GPIOReadMode, self).__init__(name = "gpio_read_mode", parameters = {
+    def __init__(self, pin, name = "gpio_read_mode"):
+        super(GPIOReadMode, self).__init__(name, parameters = {
                 GPIOReadMode.GPIO: pin,
                 IOperatingMode.STATUS: 0
             })
@@ -130,7 +162,7 @@ class GPIOReadMode(IOperatingMode):
         super(GPIOReadMode, self).update_data()
         result = self.noderef.send_command("/gpio%d" % self.get_parameter(GPIOReadMode.GPIO))
 
-        json.loads(result)
+        json.loads(result) #TODO check this
         oldval = self.get_parameter(IOperatingMode.STATUS)
         val = 0 #TODO CHANGE TO 0 ELSE NOTHING WORKS
         if result['status'] == IOperatingMode.HIGH:
@@ -139,6 +171,38 @@ class GPIOReadMode(IOperatingMode):
         if  val != oldval:
             set_parameter(IOperatingMode.STATUS, val)
 
+    def do_test_command(self, command):
+        if command == "gpio%d" % self.get_parameter(GPIOReadMode.GPIO):
+            return self.parameters
+        else:
+            return False
+
+class GPIOMode(GPIOReadMode):
+    """ GPIO Mode
+    Allows
+        /gpio<pin>
+        /gpio<pin>/<value>
+    """
+    GPIO = 'gpio'
+
+    def __init__(self, pin):
+        super(GPIOMode, self).__init__(pin, name = "gpio_mode")
+
+    def update_data(self):
+        super(GPIOMode, self).update_data()
+
+    def do_test_command(self, command):
+        print "GPIOMode command is %s" % command
+        if command == "gpio%d/%d" % (self.get_parameter(GPIOMode.GPIO), 1):
+            self.set_parameter(IOperatingMode.STATUS, 1)
+            return self.parameters
+        elif command == "gpio%d/%d" % (self.get_parameter(GPIOMode.GPIO), 0):
+            self.set_parameter(IOperatingMode.STATUS, 0)
+            return self.parameters
+        elif command.startswith("gpio%d/" % self.get_parameter(GPIOMode.GPIO)):
+            return self.parameters
+        else:
+            return False
 
 class CompositeMode(IOperatingMode):
     """ Composite Mode
@@ -178,9 +242,22 @@ class CompositeMode(IOperatingMode):
             }
         return ret
 
+    def do_test_command(self, command):
+        print "CompositeMode doing test command %s" % command
+        ret = {}
+        for mode in self.parameters['modes']:
+            print "Mode %s doing test command %s" % (str(mode), command)
+            result =  mode.do_test_command(command)
+            print "Result is %s" % result
+            if result:
+                ret = result
+                print "Result is %s, changing ret to result and returning ret %s" % (result, str(ret))
+                break
+        return ret
+
 class IoTNode(object):
     """ IoTNode helper class
-    An IoTNode has it's IPAddress, it's name and it's mode
+    An IoTNode has its IPAddress, its name and its mode
     ip is an IPAddress (or a string)
     name is a string
     mode is an instance of OperatingMode
@@ -197,6 +274,9 @@ class IoTNode(object):
     def update_data(self):
         """ Asks current mode to update it's data """
         self.mode.update_data()
+
+    def send_test_command(self, command):
+        return self.mode.do_test_command(command)
 
     def send_command(self, command):
         """ Send the specified command to this node
@@ -246,7 +326,7 @@ class Scanner(object):
     def handler_thread(self):
         while self.running:
             #TODO do stuff like polling the nodes and making notifications
-            sleep(5)
+            time.sleep(5)
             self.poll_found_nodes()
             Scanner.notifier.process_queue()
             pass
@@ -265,7 +345,8 @@ class Scanner(object):
         Takes a while, done by the handler thread
         """
         for name in self.esplist:
-            print "polling %s" % str(name)
+            pass
+            #print "polling %s" % str(name)
             #TODO decomment this
             #self.esplist[name].update_data()
 
@@ -278,6 +359,9 @@ class Scanner(object):
     def get_json(self):
         return json.dumps(self.get_node_map())
 
+    def get_node_json(self, nodename):
+        return self.get_node(nodename).to_json()
+
     def _create_test_data(self):
         self.esplist = {}
 
@@ -285,6 +369,12 @@ class Scanner(object):
         gpiomode0.set_parameter(IOperatingMode.STATUS, 1, notify = False)
         esp0 = IoTNode('192.168.1.14', 'esp0', gpiomode0)
         self.esplist[esp0.name] = esp0
+
+        sensormode0 = SensorMode(1)
+        sensormode0.set_parameter(SensorMode.CURRENT_VALUE, 7, notify = False)
+        sensormode0.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
+        sensore_cucina = IoTNode('192.168.1.44', 'SensoreCucina', sensormode0)
+        self.esplist[sensore_cucina.name] = sensore_cucina
 
         compositemode1 = CompositeMode()
         esp1 = IoTNode('192.168.1.74', 'esp1', compositemode1)
@@ -296,6 +386,10 @@ class Scanner(object):
         gpiomode12.set_parameter(IOperatingMode.STATUS, 0, notify = False)
         compositemode12.add_mode(gpiomode12)
         cosemode1 = IOperatingMode("cose_mode", {'coseparams': 42})
+        sensormode1 = SensorMode(1)
+        sensormode1.set_parameter(SensorMode.CURRENT_VALUE, 5, notify = False)
+        sensormode1.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
+        compositemode1.add_mode(sensormode1)
         compositemode1.add_mode(gpiomode11)
         compositemode1.add_mode(cosemode1)
         self.esplist[esp1.name] = esp1

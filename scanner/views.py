@@ -10,7 +10,7 @@ import time
 import json
 
 #TODO access to this should be regulated by a mutex semaphore, handler thread needs at least read access...
-iotscanner = Scanner(init_test = False, auto_scan = False)
+iotscanner = Scanner(init_test = True, auto_scan = False)
 
 @app.route('/kill/scanner')
 def kill_scanner():
@@ -82,15 +82,25 @@ def show_node_list():
     tosend = iotscanner.get_node_list()
     return json.dumps(tosend)
 
-@app.route('/node/<nodeid>/<action>')
+@app.route('/node/<nodeid>/<path:action>', methods=['GET', 'POST'])
 def send_action_to_node(nodeid, action):
     print "Sending %s to %s" % (action, nodeid)
     #TODO send it to the actual node
     return "Sent"
 
+@app.route('/testnode/<nodeid>/<path:action>', methods=['GET', 'POST'])
+def send_action_to_test_node(nodeid, action):
+    print "Sending %s to test node %s" % (action, nodeid)
+    node = iotscanner.get_node(nodeid)
+    return json.dumps(node.send_test_command(action))
+
+@app.route('/node/<nodeid>/status')
+def get_current_node_status(nodeid):
+    return iotscanner.get_node_json(nodeid)
+
 @app.route('/init/testdata')
 def load_test():
-    return json.dumps(init_test_data())
+    return json.dumps(scanner._create_test_data())
 
 @app.route('/gcm/registration', methods=['POST'])
 def receive_registration_id():
