@@ -10,7 +10,7 @@ with open('README.md') as f:
 #    license = f.read()
 
 setup(
-    name='iotscanner',
+    name='scanner',
     version='0.0.1',
     description='IoTScanner',
     long_description=readme,
@@ -19,6 +19,7 @@ setup(
     url='fedegiugi.noip.me',
     license=license,
     scripts=['scripts/iotscanner-runserver'],
+    zip_safe=False,
     packages=find_packages(exclude=('tests', 'docs'))
 )
 
