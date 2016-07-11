@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 from flask import Flask
-from flask.ext.triangle import Triangle
+#from flask.ext.triangle import Triangle
+import flask_triangle
 
 app = Flask(__name__, static_path="/static")
 Triangle(app)

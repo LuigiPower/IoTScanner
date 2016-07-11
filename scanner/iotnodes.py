@@ -35,6 +35,10 @@ class IOperatingMode(object):
         print "Updating data of %s" % str(self)
         pass
 
+    def update_test_data(self):
+        print "Updating test data of %s" % str(self)
+        pass
+
     def set_node_reference(self, noderef):
         print "Set node reference to %s" % noderef
         self.noderef = noderef
@@ -43,8 +47,10 @@ class IOperatingMode(object):
         """ Set specified parameter to value
         Also notifies any observers
         """
+	print "Parameters before setting %s to %s: %s" % (str(key), str(value), str(self.parameters))
         oldvalue = self.parameters[key]
-        self.parameters[key] = value
+	self.parameters[key] = value
+	print "Parameters after setting %s to %s: %s" % (str(key), str(value), str(self.parameters))
 
         if notify:
             print "Notifying"
@@ -88,6 +94,10 @@ class BasicMode(IOperatingMode):
             #TODO notify DISCONNECTED
             pass
 
+    def update_test_data(self):
+        print "Updating test data of %s" % str(self)
+        pass
+
     def do_test_command(self, command):
         return False
 
@@ -101,6 +111,10 @@ class EmptyMode(IOperatingMode):
 
     def update_data(self):
         super(EmptyMode, self).update_data()
+
+    def update_test_data(self):
+        print "Updating test data of %s" % str(self)
+        super(EmptyMode, self).update_test_data()
 
     def do_test_command(self, command):
         return False
@@ -142,8 +156,17 @@ class SensorMode(IOperatingMode):
         val = result[SensorMode.CURRENT_VALUE]
 
         if  val != oldval:
-            set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
-            set_parameter(SensorMode.CURRENT_VALUE, val)
+            self.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
+            self.set_parameter(SensorMode.CURRENT_VALUE, val)
+
+    def update_test_data(self):
+        super(SensorMode, self).update_test_data()
+        oldval = self.get_parameter(SensorMode.CURRENT_VALUE)
+        val = random.randint(0, 100)
+
+        if  val != oldval:
+            self.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
+            self.set_parameter(SensorMode.CURRENT_VALUE, val)
 
 class GPIOReadMode(IOperatingMode):
     """ GPIO Read Mode
@@ -169,7 +192,16 @@ class GPIOReadMode(IOperatingMode):
             val = 1
 
         if  val != oldval:
-            set_parameter(IOperatingMode.STATUS, val)
+            self.set_parameter(IOperatingMode.STATUS, val)
+
+    def update_test_data(self):
+        super(GPIOReadMode, self).update_test_data()
+
+        oldval = self.get_parameter(IOperatingMode.STATUS)
+        val = random.randint(0, 1)
+
+        if  val != oldval:
+            self.set_parameter(IOperatingMode.STATUS, val)
 
     def do_test_command(self, command):
         if command == "gpio%d" % self.get_parameter(GPIOReadMode.GPIO):
@@ -191,12 +223,17 @@ class GPIOMode(GPIOReadMode):
     def update_data(self):
         super(GPIOMode, self).update_data()
 
+    def update_test_data(self):
+        super(GPIOMode, self).update_test_data()
+
     def do_test_command(self, command):
-        print "GPIOMode command is %s" % command
+        print "GPIOMode command is %s and I'm a new version" % command
         if command == "gpio%d/%d" % (self.get_parameter(GPIOMode.GPIO), 1):
+            print "GPIOMode setting parameter %s to %s" % (IOperatingMode.STATUS, 1)
             self.set_parameter(IOperatingMode.STATUS, 1)
             return self.parameters
         elif command == "gpio%d/%d" % (self.get_parameter(GPIOMode.GPIO), 0):
+            print "GPIOMode setting parameter %s to %s" % (IOperatingMode.STATUS, 0)
             self.set_parameter(IOperatingMode.STATUS, 0)
             return self.parameters
         elif command.startswith("gpio%d/" % self.get_parameter(GPIOMode.GPIO)):
@@ -221,6 +258,11 @@ class CompositeMode(IOperatingMode):
         super(CompositeMode, self).update_data()
         for mode in self.get_parameter(CompositeMode.MODES):
             mode.update_data()
+
+    def update_test_data(self):
+        super(CompositeMode, self).update_test_data()
+        for mode in self.get_parameter(CompositeMode.MODES):
+            mode.update_test_data()
 
     def add_mode(self, mode):
         """ Adds a mode to this composite mode """
@@ -275,6 +317,9 @@ class IoTNode(object):
         """ Asks current mode to update it's data """
         self.mode.update_data()
 
+    def update_test_data(self):
+        self.mode.update_test_data()
+
     def send_test_command(self, command):
         return self.mode.do_test_command(command)
 
@@ -318,6 +363,7 @@ class Scanner(object):
             self.run_scan()
 
         if init_test:
+            random.seed(None)
             self._create_test_data()
 
         if start_handler:
@@ -327,7 +373,8 @@ class Scanner(object):
         while self.running:
             #TODO do stuff like polling the nodes and making notifications
             time.sleep(5)
-            self.poll_found_nodes()
+            #self.poll_found_nodes()
+            self.poll_found_nodes_test()
             Scanner.notifier.process_queue()
             pass
 
@@ -340,15 +387,19 @@ class Scanner(object):
         self.running = True
         self.handler.start()
 
+    def poll_found_nodes_test():
+        print "Polling found nodes test"
+        for name in self.esplist:
+            self.esplist[name].update_test_data()
+
     def poll_found_nodes(self):
         """ Asks all found nodes for a data update
         Takes a while, done by the handler thread
         """
         for name in self.esplist:
-            pass
             #print "polling %s" % str(name)
             #TODO decomment this
-            #self.esplist[name].update_data()
+            self.esplist[name].update_data()
 
     def get_node_map(self):
         return self.esplist
