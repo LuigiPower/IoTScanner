@@ -3,6 +3,7 @@ import httplib
 import json
 import sys
 import traceback
+import random
 #from netaddr import IPNetwork
 #from netaddr import IPAddress
 #from netaddr import iter_iprange
@@ -40,19 +41,16 @@ class IOperatingMode(object):
         pass
 
     def set_node_reference(self, noderef):
-        print "Set node reference to %s" % noderef
         self.noderef = noderef
 
     def set_parameter(self, key, value, notify = True):
         """ Set specified parameter to value
         Also notifies any observers
         """
-	print "Parameters before setting %s to %s: %s" % (str(key), str(value), str(self.parameters))
         oldvalue = self.parameters[key]
 	self.parameters[key] = value
-	print "Parameters after setting %s to %s: %s" % (str(key), str(value), str(self.parameters))
 
-        if notify:
+        if notify and oldvalue != value:
             print "Notifying"
             event = Event(self.noderef, self, Event.VALUE_CHANGED, [key], [oldvalue], [value])
             Scanner.notifier.add_event(event)
@@ -126,13 +124,15 @@ class SensorMode(IOperatingMode):
     """
     ID = 'id'
     CURRENT_VALUE = 'current_value'
+    VALUE_HISTORY = 'value_history'
     TIME_MILLIS = 'time_millis'
+
+    maximum_values = 10
 
     def __init__(self, sensorid, name = "sensor_mode"):
         super(SensorMode, self).__init__(name, parameters = {
                 SensorMode.ID: sensorid,
-                SensorMode.CURRENT_VALUE: 0,
-                SensorMode.TIME_MILLIS: 0
+                SensorMode.VALUE_HISTORY: []
             })
 
     def do_test_command(self, action):
@@ -140,8 +140,7 @@ class SensorMode(IOperatingMode):
         if action == "sensor%s/value" % self.get_parameter(SensorMode.ID):
             print "SensorMode action successful!"
             return {
-                    SensorMode.CURRENT_VALUE: self.get_parameter(SensorMode.CURRENT_VALUE),
-                    SensorMode.TIME_MILLIS: current_milli_time(),
+                    SensorMode.VALUE_HISTORY: self.get_parameter(SensorMode.VALUE_HISTORY),
                     SensorMode.ID: self.get_parameter(SensorMode.ID)
                 }
         else:
@@ -156,17 +155,19 @@ class SensorMode(IOperatingMode):
         val = result[SensorMode.CURRENT_VALUE]
 
         if  val != oldval:
-            self.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
             self.set_parameter(SensorMode.CURRENT_VALUE, val)
 
     def update_test_data(self):
         super(SensorMode, self).update_test_data()
-        oldval = self.get_parameter(SensorMode.CURRENT_VALUE)
+        oldhistory = self.get_parameter(SensorMode.VALUE_HISTORY)
+        oldval = oldhistory[-1]
         val = random.randint(0, 100)
+        oldhistory.append(val)
 
-        if  val != oldval:
-            self.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
-            self.set_parameter(SensorMode.CURRENT_VALUE, val)
+        if len(oldhistory) > self.maximum_values:
+            del oldhistory[0]
+
+        self.set_parameter(SensorMode.VALUE_HISTORY, oldhistory)
 
 class GPIOReadMode(IOperatingMode):
     """ GPIO Read Mode
@@ -372,7 +373,7 @@ class Scanner(object):
     def handler_thread(self):
         while self.running:
             #TODO do stuff like polling the nodes and making notifications
-            time.sleep(5)
+            time.sleep(30)
             #self.poll_found_nodes()
             self.poll_found_nodes_test()
             Scanner.notifier.process_queue()
@@ -387,8 +388,7 @@ class Scanner(object):
         self.running = True
         self.handler.start()
 
-    def poll_found_nodes_test():
-        print "Polling found nodes test"
+    def poll_found_nodes_test(self):
         for name in self.esplist:
             self.esplist[name].update_test_data()
 
@@ -422,8 +422,7 @@ class Scanner(object):
         self.esplist[esp0.name] = esp0
 
         sensormode0 = SensorMode(1)
-        sensormode0.set_parameter(SensorMode.CURRENT_VALUE, 7, notify = False)
-        sensormode0.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
+        sensormode0.set_parameter(SensorMode.VALUE_HISTORY, [7], notify = False)
         sensore_cucina = IoTNode('192.168.1.44', 'SensoreCucina', sensormode0)
         self.esplist[sensore_cucina.name] = sensore_cucina
 
@@ -438,8 +437,7 @@ class Scanner(object):
         compositemode12.add_mode(gpiomode12)
         cosemode1 = IOperatingMode("cose_mode", {'coseparams': 42})
         sensormode1 = SensorMode(1)
-        sensormode1.set_parameter(SensorMode.CURRENT_VALUE, 5, notify = False)
-        sensormode1.set_parameter(SensorMode.TIME_MILLIS, current_milli_time(), notify = False)
+        sensormode1.set_parameter(SensorMode.VALUE_HISTORY, [5], notify = False)
         compositemode1.add_mode(sensormode1)
         compositemode1.add_mode(gpiomode11)
         compositemode1.add_mode(cosemode1)

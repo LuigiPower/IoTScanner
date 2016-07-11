@@ -2,7 +2,7 @@
 
 from flask import Flask
 #from flask.ext.triangle import Triangle
-import flask_triangle
+from flask_triangle import Triangle
 
 app = Flask(__name__, static_path="/static")
 Triangle(app)
