@@ -33,11 +33,11 @@ class IOperatingMode(object):
         self.parameters = parameters
 
     def update_data(self):
-        print "Updating data of %s" % str(self)
+        #print "Updating data of %s" % str(self)
         pass
 
     def update_test_data(self):
-        print "Updating test data of %s" % str(self)
+        #print "Updating test data of %s" % str(self)
         pass
 
     def set_node_reference(self, noderef):
@@ -50,8 +50,8 @@ class IOperatingMode(object):
         oldvalue = self.parameters[key]
 	self.parameters[key] = value
 
-        if notify and oldvalue != value:
-            print "Notifying"
+        if notify:
+            print "Notifying node %s about %s on %s with values %s" % (self.noderef.name, self.name, str(Event.VALUE_CHANGED), str(value))
             event = Event(self.noderef, self, Event.VALUE_CHANGED, [key], [oldvalue], [value])
             Scanner.notifier.add_event(event)
 
@@ -93,11 +93,12 @@ class BasicMode(IOperatingMode):
             pass
 
     def update_test_data(self):
-        print "Updating test data of %s" % str(self)
+        #print "Updating test data of %s" % str(self)
         pass
 
     def do_test_command(self, command):
         return False
+
 
 class EmptyMode(IOperatingMode):
     """ Empty Mode
@@ -111,11 +112,12 @@ class EmptyMode(IOperatingMode):
         super(EmptyMode, self).update_data()
 
     def update_test_data(self):
-        print "Updating test data of %s" % str(self)
+        #print "Updating test data of %s" % str(self)
         super(EmptyMode, self).update_test_data()
 
     def do_test_command(self, command):
         return False
+
 
 class SensorMode(IOperatingMode):
     """ GPIO Read Mode
@@ -149,25 +151,24 @@ class SensorMode(IOperatingMode):
     def update_data(self):
         super(SensorMode, self).update_data()
         result = self.noderef.send_command("/sensor%d/value" % self.get_parameter(SensorMode.ID))
-
-        json.loads(result) #TODO check this
-        oldval = self.get_parameter(SensorMode.CURRENT_VALUE)
         val = result[SensorMode.CURRENT_VALUE]
-
-        if  val != oldval:
-            self.set_parameter(SensorMode.CURRENT_VALUE, val)
+        self.set_parameter(SensorMode.CURRENT_VALUE, val)
 
     def update_test_data(self):
         super(SensorMode, self).update_test_data()
-        oldhistory = self.get_parameter(SensorMode.VALUE_HISTORY)
-        oldval = oldhistory[-1]
+        oldhistory = list(self.get_parameter(SensorMode.VALUE_HISTORY))
         val = random.randint(0, 100)
-        oldhistory.append(val)
+
+        oldhistory.append({
+            SensorMode.CURRENT_VALUE: val,
+            SensorMode.TIME_MILLIS: current_milli_time()
+        })
 
         if len(oldhistory) > self.maximum_values:
             del oldhistory[0]
 
         self.set_parameter(SensorMode.VALUE_HISTORY, oldhistory)
+
 
 class GPIOReadMode(IOperatingMode):
     """ GPIO Read Mode
@@ -210,6 +211,7 @@ class GPIOReadMode(IOperatingMode):
         else:
             return False
 
+
 class GPIOMode(GPIOReadMode):
     """ GPIO Mode
     Allows
@@ -241,6 +243,7 @@ class GPIOMode(GPIOReadMode):
             return self.parameters
         else:
             return False
+
 
 class CompositeMode(IOperatingMode):
     """ Composite Mode
@@ -286,17 +289,18 @@ class CompositeMode(IOperatingMode):
         return ret
 
     def do_test_command(self, command):
-        print "CompositeMode doing test command %s" % command
+        #print "CompositeMode doing test command %s" % command
         ret = {}
         for mode in self.parameters['modes']:
-            print "Mode %s doing test command %s" % (str(mode), command)
+            #print "Mode %s doing test command %s" % (str(mode), command)
             result =  mode.do_test_command(command)
-            print "Result is %s" % result
+            #print "Result is %s" % result
             if result:
                 ret = result
-                print "Result is %s, changing ret to result and returning ret %s" % (result, str(ret))
+                #print "Result is %s, changing ret to result and returning ret %s" % (result, str(ret))
                 break
         return ret
+
 
 class IoTNode(object):
     """ IoTNode helper class
@@ -332,7 +336,7 @@ class IoTNode(object):
             /dashboard
             ...
         """
-        print "Sending command to %s" % self.ip
+        #print "Sending command to %s" % self.ip
         conn = httplib.HTTPConnection(str(self.ip), IoTNode.PORT_NUMBER)
         conn.request("GET", command)
         response = conn.getresponse()
@@ -351,6 +355,7 @@ class IoTNode(object):
 
     def get_value(self, value_name):
         return self.values[value_name]
+
 
 class Scanner(object):
 
@@ -380,7 +385,7 @@ class Scanner(object):
             pass
 
     def stop_handler_thread(self):
-        print "Stopping handler thread..."
+        #print "Stopping handler thread..."
         self.running = False
 
     def start_handler_thread(self):
@@ -422,7 +427,7 @@ class Scanner(object):
         self.esplist[esp0.name] = esp0
 
         sensormode0 = SensorMode(1)
-        sensormode0.set_parameter(SensorMode.VALUE_HISTORY, [7], notify = False)
+        sensormode0.set_parameter(SensorMode.VALUE_HISTORY, [], notify = False)
         sensore_cucina = IoTNode('192.168.1.44', 'SensoreCucina', sensormode0)
         self.esplist[sensore_cucina.name] = sensore_cucina
 
@@ -437,7 +442,7 @@ class Scanner(object):
         compositemode12.add_mode(gpiomode12)
         cosemode1 = IOperatingMode("cose_mode", {'coseparams': 42})
         sensormode1 = SensorMode(1)
-        sensormode1.set_parameter(SensorMode.VALUE_HISTORY, [5], notify = False)
+        sensormode1.set_parameter(SensorMode.VALUE_HISTORY, [], notify = False)
         compositemode1.add_mode(sensormode1)
         compositemode1.add_mode(gpiomode11)
         compositemode1.add_mode(cosemode1)
@@ -447,12 +452,12 @@ class Scanner(object):
         tosend = []
 
         for esp in self.esplist:
-            print "ESP: %s" % esp
+            #print "ESP: %s" % esp
             node = self.esplist[esp]
-            print "ESP: %s %s" % (esp, str(node))
+            #print "ESP: %s %s" % (esp, str(node))
             tosend.append({ "name": node.name, "ip": node.ip, "mode": node.mode.to_dict() })
 
-        print str(tosend)
+        #print str(tosend)
 
         return tosend
 
@@ -466,7 +471,7 @@ class Scanner(object):
                     if addresses['addr'].startswith("127."):
                         continue
 
-                    print addresses
+                    #print addresses
                     local_ip_addresses.append(addresses)
             except:
                 pass
@@ -507,7 +512,7 @@ class Scanner(object):
         """ Runs a network scan
         may take a few minutes (does a HTTP request on each device connected to the network)
         """
-        print "Running scan..."
+        #print "Running scan..."
         iplist = self._get_local_ip_list()
         esplist = self._scan_local_ips(iplist)
         return esplist
@@ -562,7 +567,7 @@ class Scanner(object):
         local_ip_addresses = self.get_local_ips()
         iplist = []
 
-        print "Addresses %s" % str(local_ip_addresses)
+        #print "Addresses %s" % str(local_ip_addresses)
         for address in local_ip_addresses:
             (count, binarymask, numbermask) = self.mask_to_count(address['netmask'])
             numbernetwork = self.get_network_address(address['addr'], numbermask)
@@ -586,7 +591,7 @@ class Scanner(object):
                 strip = "%d.%d.%d.%d:%d" % (ip[0], ip[1], ip[2], ip[3], IoTNode.PORT_NUMBER)
                 if strip != "10.40.0.88":
                     continue
-                print "Doing HTTPConnection to %s" % strip
+                #print "Doing HTTPConnection to %s" % strip
                 conn = httplib.HTTPConnection(strip)
                 conn.request("GET", "/scanning/beacon")
                 #TODO fare un POST invece di GET, inviando l'ip del server
@@ -594,7 +599,7 @@ class Scanner(object):
                 response = conn.getresponse()
 
                 data = response.read()
-                print "FOUND ESP, data is %s" % data
+                #print "FOUND ESP, data is %s" % data
                 #TODO esp must give back name and current mode(s)
                 jsondata = json.loads(data)
                 extras = jsondata['extras']
@@ -605,13 +610,14 @@ class Scanner(object):
                 #TODO mode...
 
                 self.esplist[extras['name']] = node
-                print self.esplist
+                #print self.esplist
                 number += 1
             except :
-                print "Unexpected error", sys.exc_info()[0]
+                #print "Unexpected error", sys.exc_info()[0]
                 print traceback.format_exc()
+                pass
 
-        print self.esplist
+        #print self.esplist
 
         return esplist
 

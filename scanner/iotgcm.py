@@ -26,7 +26,7 @@ class Event(object):
                 'node': self.noderef.to_dict(),
                 'event': {
                     'type': self.evtype,
-                    'mode_name': self.moderef.name,
+                    'mode': self.moderef.to_dict(),
                     'params': self.parameters,
                     'oldvalues': self.oldvalues,
                     'newvalues': self.newvalues
@@ -54,7 +54,7 @@ class Notifier(object):
         #print "Processing queue, events are %s" % str(self.event_queue)
         while sent < max_sent and len(self.event_queue) > 0:
             event = self.event_queue.pop(0)
-            print "Sending message %s" % event.to_json()
+            #print "Sending message %s" % event.to_json()
             self._send_message(get_gcm_list(), event.to_dict())  #TODO in a very far future, choose regid based on USERID (yeah users, with login and password...)
             sent = sent + 1
         return sent
@@ -63,8 +63,8 @@ class Notifier(object):
         gcm = GCM(self.API_KEY)
         data = json_to_send
 
-        print "Sending this data:"
-        print "%s" % str(data)
+        #print "Sending this data:"
+        #print "%s" % str(data)
         # Downstream message using JSON request
         #TODO fix "COULD NOT BE PARSED AS JSON" error...
         response = gcm.json_request(registration_ids=reg_id_list, data=data)
