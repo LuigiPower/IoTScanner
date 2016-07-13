@@ -90,9 +90,12 @@ def send_action_to_node(nodeid, action):
 
 @app.route('/testnode/<nodeid>/<path:action>', methods=['GET', 'POST'])
 def send_action_to_test_node(nodeid, action):
-    print "Sending %s to test node %s" % (action, nodeid)
+    json_parameters = None
+    if "json_parameters" in request.form:
+        json_parameters = json.loads(request.form['json_parameters'])
+    print "Sending %s to test node %s (%s)" % (action, nodeid, str(json_parameters))
     node = iotscanner.get_node(nodeid)
-    return json.dumps(node.send_test_command(action))
+    return json.dumps(node.send_test_command(action, json_parameters))
 
 @app.route('/node/<nodeid>/status')
 def get_current_node_status(nodeid):

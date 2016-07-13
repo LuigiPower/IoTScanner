@@ -17,7 +17,6 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 ################################################################################
 # NODE INITIALIZATION
 ################################################################################
-
 class IOperatingMode(object):
     """ IoTMode helper class
     An IoTMode has it's name and it's parameters
@@ -26,6 +25,9 @@ class IOperatingMode(object):
     depending on mode type
     """
     STATUS = 'status'
+
+    success = { STATUS: "OK" }
+    failure = { STATUS: "ERR" }
 
     def __init__(self, name, parameters):
         self.noderef = None
@@ -59,7 +61,17 @@ class IOperatingMode(object):
         """ Get specified parameter """
         return self.parameters[parameter]
 
-    def do_test_command(self, command):
+    def do_test_command(self, command, json_parameters):
+        print "Got command %s with params %s" % (command, str(json_parameters))
+        if command.startswith("basic/set/mode/"):
+            split = command.split('/')
+            print "Split is %s" % str(split)
+            if len(split) < 3:
+                return self.failure
+            newmode = split[3]
+            modetoset = stringToMode(newmode, json_parameters)
+            self.noderef.mode = modetoset
+            return self.success
         return False
 
     def to_dict(self):
@@ -79,9 +91,10 @@ class BasicMode(IOperatingMode):
         /scanning/beacon
         /init/set/mode/<modename>
     """
+    NAME = "basic_mode"
 
-    def __init__(self):
-        super(BasicMode, self).__init__(name = "basic_mode", parameters = {})
+    def __init__(self, parameters = {}):
+        super(BasicMode, self).__init__(name = BasicMode.NAME, parameters = parameters)
 
     def update_data(self):
         super(BasicMode, self).update_data()
@@ -96,7 +109,10 @@ class BasicMode(IOperatingMode):
         #print "Updating test data of %s" % str(self)
         pass
 
-    def do_test_command(self, command):
+    def do_test_command(self, command, json_parameters):
+        result = super(EmptyMode, self).do_test_command(command, json_parameters)
+        if result:
+            return result
         return False
 
 
@@ -104,9 +120,10 @@ class EmptyMode(IOperatingMode):
     """ Empty Mode
     Allows nothing
     """
+    NAME = "empty_mode"
 
-    def __init__(self):
-        super(EmptyMode, self).__init__(name = "empty_mode", parameters = {})
+    def __init__(self, parameters = {}):
+        super(EmptyMode, self).__init__(name = EmptyMode.NAME, parameters = parameters)
 
     def update_data(self):
         super(EmptyMode, self).update_data()
@@ -115,7 +132,10 @@ class EmptyMode(IOperatingMode):
         #print "Updating test data of %s" % str(self)
         super(EmptyMode, self).update_test_data()
 
-    def do_test_command(self, command):
+    def do_test_command(self, command, json_parameters):
+        result = super(EmptyMode, self).do_test_command(command, json_parameters)
+        if result:
+            return result
         return False
 
 
@@ -124,6 +144,8 @@ class SensorMode(IOperatingMode):
     Allows
         /sensor<id>/value
     """
+    NAME = "sensor_mode"
+
     ID = 'id'
     CURRENT_VALUE = 'current_value'
     VALUE_HISTORY = 'value_history'
@@ -131,16 +153,22 @@ class SensorMode(IOperatingMode):
 
     maximum_values = 10
 
-    def __init__(self, sensorid, name = "sensor_mode"):
-        super(SensorMode, self).__init__(name, parameters = {
+    def __init__(self, sensorid = 0, name = "sensor_mode", parameters = None):
+        if parameters is None:
+            parameters = {
                 SensorMode.ID: sensorid,
                 SensorMode.VALUE_HISTORY: []
-            })
+            }
+        super(SensorMode, self).__init__(name, parameters = parameters)
 
-    def do_test_command(self, action):
-        print "SensorMode do_test_command action %s" % action
-        if action == "sensor%s/value" % self.get_parameter(SensorMode.ID):
-            print "SensorMode action successful!"
+    def do_test_command(self, command, json_parameters):
+        result = super(SensorMode, self).do_test_command(command, json_parameters)
+        if result:
+            return result
+
+        print "SensorMode do_test_command command %s" % command
+        if command == "sensor%s/value" % self.get_parameter(SensorMode.ID):
+            print "SensorMode command successful!"
             return {
                     SensorMode.VALUE_HISTORY: self.get_parameter(SensorMode.VALUE_HISTORY),
                     SensorMode.ID: self.get_parameter(SensorMode.ID)
@@ -175,13 +203,17 @@ class GPIOReadMode(IOperatingMode):
     Allows
         /gpio<pin>
     """
+    NAME = "gpio_read_mode"
+
     GPIO = 'gpio'
 
-    def __init__(self, pin, name = "gpio_read_mode"):
-        super(GPIOReadMode, self).__init__(name, parameters = {
+    def __init__(self, pin = 0, name = "gpio_read_mode", parameters = None):
+        if parameters is None:
+            parameters = {
                 GPIOReadMode.GPIO: pin,
                 IOperatingMode.STATUS: 0
-            })
+            }
+        super(GPIOReadMode, self).__init__(name, parameters = parameters)
 
     def update_data(self):
         super(GPIOReadMode, self).update_data()
@@ -205,7 +237,11 @@ class GPIOReadMode(IOperatingMode):
         if  val != oldval:
             self.set_parameter(IOperatingMode.STATUS, val)
 
-    def do_test_command(self, command):
+    def do_test_command(self, command, json_parameters):
+        result = super(GPIOReadMode, self).do_test_command(command, json_parameters)
+        if result:
+            return result
+
         if command == "gpio%d" % self.get_parameter(GPIOReadMode.GPIO):
             return self.parameters
         else:
@@ -218,10 +254,12 @@ class GPIOMode(GPIOReadMode):
         /gpio<pin>
         /gpio<pin>/<value>
     """
+    NAME = "gpio_mode"
+
     GPIO = 'gpio'
 
-    def __init__(self, pin):
-        super(GPIOMode, self).__init__(pin, name = "gpio_mode")
+    def __init__(self, pin = 0, parameters = None):
+        super(GPIOMode, self).__init__(pin, name = "gpio_mode", parameters = parameters)
 
     def update_data(self):
         super(GPIOMode, self).update_data()
@@ -229,7 +267,11 @@ class GPIOMode(GPIOReadMode):
     def update_test_data(self):
         super(GPIOMode, self).update_test_data()
 
-    def do_test_command(self, command):
+    def do_test_command(self, command, json_parameters):
+        result = super(GPIOMode, self).do_test_command(command, json_parameters)
+        if result:
+            return result
+
         print "GPIOMode command is %s and I'm a new version" % command
         if command == "gpio%d/%d" % (self.get_parameter(GPIOMode.GPIO), 1):
             print "GPIOMode setting parameter %s to %s" % (IOperatingMode.STATUS, 1)
@@ -239,8 +281,11 @@ class GPIOMode(GPIOReadMode):
             print "GPIOMode setting parameter %s to %s" % (IOperatingMode.STATUS, 0)
             self.set_parameter(IOperatingMode.STATUS, 0)
             return self.parameters
-        elif command.startswith("gpio%d/" % self.get_parameter(GPIOMode.GPIO)):
-            return self.parameters
+        elif command.startswith("gpio%d" % self.get_parameter(GPIOMode.GPIO)):
+            if json_parameters == None:
+                return self.parameters
+            else:
+                self.parameters = json_parameters #set the new parameters...
         else:
             return False
 
@@ -250,12 +295,16 @@ class CompositeMode(IOperatingMode):
     A container for any number of modes
     can be nested inside other composite modes
     """
+    NAME = "composite_mode"
+
     MODES = 'modes'
 
-    def __init__(self):
-        super(CompositeMode, self).__init__(name = "composite_mode", parameters = {
+    def __init__(self, parameters = None):
+        if parameters is None:
+            parameters = {
                 CompositeMode.MODES: []
-            })
+            }
+        super(CompositeMode, self).__init__(name = "composite_mode", parameters = parameters)
 
     def update_data(self):
         """ Updates data on all submodes """
@@ -288,18 +337,29 @@ class CompositeMode(IOperatingMode):
             }
         return ret
 
-    def do_test_command(self, command):
+    def do_test_command(self, command, json_parameters):
+        result = super(CompositeMode, self).do_test_command(command, json_parameters)
+        if result:
+            return result
+
         #print "CompositeMode doing test command %s" % command
-        ret = {}
-        for mode in self.parameters['modes']:
-            #print "Mode %s doing test command %s" % (str(mode), command)
-            result =  mode.do_test_command(command)
-            #print "Result is %s" % result
-            if result:
-                ret = result
-                #print "Result is %s, changing ret to result and returning ret %s" % (result, str(ret))
-                break
-        return ret
+        if command.startswith("composite/add/mode/"):
+            split = command.split('/')
+            newmode = split[3]
+            modetoset = stringToMode(newmode, json_parameters)
+            self.noderef.mode = modetoset
+            return self.success
+        elif command.startswith("composite/del/mode/"):
+            split = command.split('/')
+            return self.failure #TODO instant failure as I have no ID to identify modes with
+        else:
+            ret = {}
+            for mode in self.parameters['modes']:
+                result =  mode.do_test_command(command, json_parameters)
+                if result:
+                    ret = result
+                    break
+            return ret
 
 
 class IoTNode(object):
@@ -325,8 +385,8 @@ class IoTNode(object):
     def update_test_data(self):
         self.mode.update_test_data()
 
-    def send_test_command(self, command):
-        return self.mode.do_test_command(command)
+    def send_test_command(self, command, json_parameters):
+        return self.mode.do_test_command(command, json_parameters)
 
     def send_command(self, command):
         """ Send the specified command to this node
@@ -620,6 +680,20 @@ class Scanner(object):
         #print self.esplist
 
         return esplist
+
+def stringToMode(name, json):
+    if name == BasicMode.NAME:
+        return BasicMode(parameters = json)
+    elif name == EmptyMode.NAME:
+        return EmptyMode(parameters = json)
+    elif name == GPIOMode.NAME:
+        return GPIOMode(parameters = json)
+    elif name == GPIOReadMode.NAME:
+        return GPIOReadMode(parameters = json)
+    elif name == SensorMode.NAME:
+        return SensorMode(parameters = json)
+    else:
+        return IOperatingMode(name, parameters)
 
 ################################################################################
 #   EXAMPLE DATA

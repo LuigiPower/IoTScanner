@@ -19,7 +19,7 @@ class Event(object):
         self.oldvalues = oldvalues
         self.newvalues = newvalues
 
-        print "Created event %s %s %s %s %s %s" % (str(noderef), str(moderef.to_dict()), self.evtype, self.parameters, self.oldvalues, self.newvalues)
+        #print "Created event %s %s %s %s %s %s" % (str(noderef), str(moderef.to_dict()), self.evtype, self.parameters, self.oldvalues, self.newvalues)
 
     def to_dict(self):
         return {
