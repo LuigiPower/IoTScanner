@@ -8,9 +8,10 @@ def start_flask():
     app.debug = False
     app.run(host='0.0.0.0')
 
-start_flask()
+if __name__ == '__main__':
+    start_flask()
 
-from scanner.views import kill_scanner
-kill_scanner()
+    from scanner.views import kill_scanner
+    kill_scanner()
 
 print "All done, closing..."

@@ -17,9 +17,11 @@ setup(
     author='Federico Giuggioloni',
     author_email='federico.giuggioloni@gmail.com',
     url='fedegiugi.noip.me',
-    license=license,
+    #license=license,
     scripts=['scripts/iotscanner-runserver'],
+    include_package_data=True,
     zip_safe=False,
-    packages=find_packages(exclude=('tests', 'docs'))
+    packages=find_packages(exclude=('tests', 'docs')),
+    install_requires=['Flask', 'Flask-Triangle']
 )
 

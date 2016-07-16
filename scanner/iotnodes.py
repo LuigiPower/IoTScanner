@@ -147,17 +147,25 @@ class SensorMode(IOperatingMode):
     NAME = "sensor_mode"
 
     ID = 'id'
+    SENSOR_DESCRIPTION = 'sensor_description'
+    UNIT_TYPE = 'unit_type'
+    UNIT_SYMBOL = 'unit_symbol'
     CURRENT_VALUE = 'current_value'
     VALUE_HISTORY = 'value_history'
     TIME_MILLIS = 'time_millis'
 
+    random_min = 0
+    random_max = 100
     maximum_values = 10
 
     def __init__(self, sensorid = 0, name = "sensor_mode", parameters = None):
         if parameters is None:
             parameters = {
                 SensorMode.ID: sensorid,
-                SensorMode.VALUE_HISTORY: []
+                SensorMode.VALUE_HISTORY: [],
+                SensorMode.SENSOR_DESCRIPTION: "Temperatura",
+                SensorMode.UNIT_TYPE: "Temperatura",
+                SensorMode.UNIT_SYMBOL: "°C"
             }
         super(SensorMode, self).__init__(name, parameters = parameters)
 
@@ -167,8 +175,16 @@ class SensorMode(IOperatingMode):
             return result
 
         print "SensorMode do_test_command command %s" % command
-        if command == "sensor%s/value" % self.get_parameter(SensorMode.ID):
-            print "SensorMode command successful!"
+        if command == "sensor%s/set/description" % self.get_parameter(SensorMode.ID):
+            description = json_parameters['description']
+            self.set_parameter(SensorMode.SENSOR_DESCRIPTION, description)
+        elif command == "sensor%s/set/unit_type" % self.get_parameter(SensorMode.ID):
+            unit_type = json_parameters['unit_type']
+            self.set_parameter(SensorMode.UNIT_TYPE, unit_type)
+        elif command == "sensor%s/set/unit_symbol" % self.get_parameter(SensorMode.ID):
+            unit = json_parameters['unit']
+            self.set_parameter(SensorMode.UNIT_SYMBOL, unit)
+        elif command == "sensor%s/value" % self.get_parameter(SensorMode.ID):
             return {
                     SensorMode.VALUE_HISTORY: self.get_parameter(SensorMode.VALUE_HISTORY),
                     SensorMode.ID: self.get_parameter(SensorMode.ID)
@@ -185,7 +201,7 @@ class SensorMode(IOperatingMode):
     def update_test_data(self):
         super(SensorMode, self).update_test_data()
         oldhistory = list(self.get_parameter(SensorMode.VALUE_HISTORY))
-        val = random.randint(0, 100)
+        val = random.randint(self.random_min, self.random_max)
 
         oldhistory.append({
             SensorMode.CURRENT_VALUE: val,
@@ -483,16 +499,21 @@ class Scanner(object):
 
         gpiomode0 = GPIOMode(2)
         gpiomode0.set_parameter(IOperatingMode.STATUS, 1, notify = False)
-        esp0 = IoTNode('192.168.1.14', 'esp0', gpiomode0)
+        esp0 = IoTNode('192.168.1.14', 'Ingresso', gpiomode0)
         self.esplist[esp0.name] = esp0
 
         sensormode0 = SensorMode(1)
+        sensormode0.random_min = 31
+        sensormode0.random_max = 34
         sensormode0.set_parameter(SensorMode.VALUE_HISTORY, [], notify = False)
-        sensore_cucina = IoTNode('192.168.1.44', 'SensoreCucina', sensormode0)
+        sensormode0.set_parameter(SensorMode.SENSOR_DESCRIPTION, "Temperatura della cucina", notify = False)
+        sensormode0.set_parameter(SensorMode.UNIT_TYPE, "Celsius", notify = False)
+        sensormode0.set_parameter(SensorMode.UNIT_SYMBOL, "°C", notify = False)
+        sensore_cucina = IoTNode('192.168.1.44', 'Cucina', sensormode0)
         self.esplist[sensore_cucina.name] = sensore_cucina
 
         compositemode1 = CompositeMode()
-        esp1 = IoTNode('192.168.1.74', 'esp1', compositemode1)
+        esp1 = IoTNode('192.168.1.74', 'Cantina', compositemode1)
         gpiomode11 = GPIOReadMode(1)
         gpiomode11.set_parameter(IOperatingMode.STATUS, 1, notify = False)
         compositemode12 = CompositeMode()
@@ -500,12 +521,17 @@ class Scanner(object):
         gpiomode12 = GPIOMode(2)
         gpiomode12.set_parameter(IOperatingMode.STATUS, 0, notify = False)
         compositemode12.add_mode(gpiomode12)
-        cosemode1 = IOperatingMode("cose_mode", {'coseparams': 42})
+        #cosemode1 = IOperatingMode("cose_mode", {'coseparams': 42})
         sensormode1 = SensorMode(1)
+        sensormode1.random_min = 26
+        sensormode1.random_max = 29
         sensormode1.set_parameter(SensorMode.VALUE_HISTORY, [], notify = False)
+        sensormode1.set_parameter(SensorMode.SENSOR_DESCRIPTION, "Temperatura della cantina", notify = False)
+        sensormode1.set_parameter(SensorMode.UNIT_TYPE, "Celsius", notify = False)
+        sensormode1.set_parameter(SensorMode.UNIT_SYMBOL, "°C", notify = False)
         compositemode1.add_mode(sensormode1)
         compositemode1.add_mode(gpiomode11)
-        compositemode1.add_mode(cosemode1)
+        #compositemode1.add_mode(cosemode1)
         self.esplist[esp1.name] = esp1
 
     def get_node_list(self):
