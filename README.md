@@ -21,8 +21,14 @@ This repository contains code that was used as a test for the Android applicatio
 - Any type of interface
 - Security of any kind
 - Got to finish the list of available commands
+- List of dependencies to easily install all of them
 
-### Installation
+## Dependencies
+- MongoDB and it's Python driver
+- flask and flask-triangle
+- python-gcm
+
+## Installation
 Keep in mind that this script IS NOT completed, and it still has test code hardcoded in.
 For example, even with the script installed and all, the scanner will return a fixed JSON (in file iotnodes.py on line 459 poll_found_nodes_test is used instead of poll_found_nodes because I needed to test before completing the hardware part)
 
